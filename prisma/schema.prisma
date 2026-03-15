@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Report {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  title           String
+  summary         String
+  trendAnalysis   String
+  samsungImpact   String   @default("")
+  samsungInsights String   @default("")
+  createdAt       DateTime @default(now())
+  newsItems       NewsItem[]
+}
+
+model NewsItem {
+  id               String   @id @default(cuid())
+  reportId         String
+  report           Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  title            String
+  source           String
+  sourceUrl        String
+  publishedAt      DateTime
+  thumbnail        String?
+  summary          String
+  analysis         String
+  samsungRelevance String?
+  category         String
+  importance       Int      @default(3)
+  createdAt        DateTime @default(now())
+
+  @@index([reportId])
+  @@index([publishedAt])
+}
+
+model CollectionLog {
+  id         String   @id @default(cuid())
+  source     String
+  status     String
+  itemCount  Int      @default(0)
+  errorMsg   String?
+  executedAt DateTime @default(now())
+}
