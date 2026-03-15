@@ -2,7 +2,10 @@
 
 ## 1. 시스템 개요
 
-매일 아침 6시(KST)에 AI 관련 최신 뉴스를 자동 수집·선별·요약하여 웹사이트에 리포트를 발행하는 시스템.
+매일 아침 6시(KST)에 AI 관련 최신 뉴스를 자동 수집·선별·요약하여 웹사이트에 **한국어** 리포트를 발행하는 시스템.
+각 리포트에는 **삼성전자에 미치는 영향 및 시사점** 분석을 포함한다.
+
+> **언어 정책**: 해외 소스(영문 뉴스, 영문 YouTube)를 포함한 모든 수집 콘텐츠는 Claude API를 통해 한국어로 번역·요약하여 리포트에 반영한다.
 
 ---
 
@@ -12,8 +15,8 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                        데이터 소스 레이어                          │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────────┐   │
-│  │ AI Times │ │ GeekNews │ │ X (빅테크)│ │ YouTube (안될공학, │   │
-│  │ RSS/Scrape│ │ RSS/API  │ │  API     │ │ 조코딩, T Times)  │   │
+│  │ AI Times │ │ GeekNews │ │ X (빅테크)│ │ YouTube (국내3+   │   │
+│  │ RSS/Scrape│ │ RSS/API  │ │  API     │ │  해외5 채널)      │   │
 │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────────┬──────────┘  │
 │       │             │            │                 │             │
 └───────┼─────────────┼────────────┼─────────────────┼─────────────┘
@@ -87,11 +90,24 @@
 | Apple | @Apple | AI, ML |
 
 ### 4.3 YouTube 채널
+
+#### 국내 채널
 | 채널명 | 채널 ID | 콘텐츠 유형 |
 |--------|---------|-------------|
 | 안될공학 | 수집 시 확인 | AI/기술 해설 |
 | 조코딩 | 수집 시 확인 | AI 개발/튜토리얼 |
 | T Times | 수집 시 확인 | 테크 뉴스/분석 |
+
+#### 해외 채널
+| 채널명 | 채널 ID | 콘텐츠 유형 | 언어 |
+|--------|---------|-------------|------|
+| Two Minute Papers | 수집 시 확인 | AI 논문 해설 | EN |
+| AI Explained | 수집 시 확인 | AI 뉴스/심층 분석 | EN |
+| Matt Wolfe | 수집 시 확인 | AI 도구/뉴스 위클리 | EN |
+| Fireship | 수집 시 확인 | 개발/AI 속보 | EN |
+| TheAIGRID | 수집 시 확인 | AI 뉴스/제품 리뷰 | EN |
+
+> **참고**: 해외 채널 콘텐츠는 Claude API를 통해 한국어로 번역·요약하여 리포트에 반영.
 
 ---
 
@@ -126,12 +142,15 @@ codex2/
 │   │   ├── news-filter.ts            # 뉴스 선별 (AI 관련성 판단)
 │   │   ├── news-summarizer.ts        # 뉴스 요약 (LLM)
 │   │   ├── news-analyzer.ts          # 뉴스 분석 (트렌드, 영향도)
+│   │   ├── samsung-analyzer.ts       # 삼성전자 영향/시사점 분석 (LLM)
+│   │   ├── translator.ts             # 해외 콘텐츠 한국어 번역 (LLM)
 │   │   └── report-generator.ts       # 리포트 HTML 생성
 │   │
 │   ├── components/                   # React 컴포넌트
 │   │   ├── ReportCard.tsx            # 리포트 카드
 │   │   ├── NewsTable.tsx             # 뉴스 요약 테이블
 │   │   ├── TrendChart.tsx            # 트렌드 차트
+│   │   ├── SamsungInsightCard.tsx    # 삼성전자 시사점 카드
 │   │   ├── SourceBadge.tsx           # 출처 배지
 │   │   ├── Header.tsx                # 헤더
 │   │   └── Footer.tsx                # 푸터
@@ -174,7 +193,9 @@ model Report {
   date        DateTime  @unique          // 발행일 (YYYY-MM-DD)
   title       String                     // 리포트 제목
   summary     String                     // 전체 요약
-  trendAnalysis String                   // 트렌드 분석
+  trendAnalysis    String                 // 트렌드 분석
+  samsungImpact    String                 // 삼성전자 영향 분석
+  samsungInsights  String                 // 삼성전자 시사점/액션 아이템
   createdAt   DateTime  @default(now())
   newsItems   NewsItem[]
 }
@@ -192,6 +213,7 @@ model NewsItem {
 
   summary     String                     // 핵심 요약 (LLM 생성)
   analysis    String                     // 분석 내용 (LLM 생성)
+  samsungRelevance String?               // 삼성전자 관련성/시사점 (LLM 생성)
   category    String                     // 카테고리 (모델, 서비스, 정책, 연구 등)
   importance  Int       @default(3)      // 중요도 (1~5)
 
@@ -220,7 +242,7 @@ model CollectionLog {
     ├── AI Times RSS/스크래핑 → 최근 7일 기사
     ├── GeekNews RSS → 최근 7일 AI 관련 게시물
     ├── X API → 빅테크 계정 최근 7일 AI 관련 트윗
-    └── YouTube Data API → 3개 채널 최근 7일 영상
+    └── YouTube Data API → 8개 채널(국내 3 + 해외 5) 최근 7일 영상
     │
     ▼
 [2단계] AI 선별 & 필터링 (~1분)
@@ -238,6 +260,9 @@ model CollectionLog {
     │   전체 리포트에 대해:
     │   - 오늘의 AI 트렌드 종합 분석
     │   - 주간 동향 요약
+    │   - 🏢 삼성전자 영향/시사점 분석
+    │   해외 콘텐츠:
+    │   - 영문 → 한국어 번역·요약
     │
     ▼
 [4단계] 리포트 생성 & 저장 (~1분)
@@ -275,11 +300,17 @@ model CollectionLog {
   - AI 분석 내용
   - 원본 링크
 
-### 8.5 소스별 분포 차트
+### 8.5 삼성전자 영향 & 시사점
+- **삼성전자에 미치는 영향**: 오늘의 AI 뉴스가 삼성전자 사업(반도체, 모바일, 가전, 클라우드 등)에 미치는 영향 종합 분석
+- **주목해야 할 시사점**: 삼성전자가 관심 있게 살펴봐야 할 포인트 (경쟁사 동향, 기술 트렌드, 파트너십 기회 등)
+- **개별 뉴스 관련성**: 중요도 높은 뉴스별 삼성전자 관련 시사점 표시
+- 시각적 구분을 위해 별도 강조 카드 형태로 표시 (파란색 액센트)
+
+### 8.6 소스별 분포 차트
 - 파이 차트: 소스별 뉴스 비율
 - 바 차트: 카테고리별 뉴스 수
 
-### 8.6 주간 트렌드
+### 8.7 주간 트렌드
 - 최근 7일간 카테고리별 뉴스 추이 라인 차트
 
 ---
@@ -340,21 +371,27 @@ jobs:
 6. 리포트 목록/상세 페이지 UI
 7. 수동 트리거 API
 
+### Phase 1.5: 삼성전자 분석 & 다국어 처리
+8. 삼성전자 영향/시사점 분석기 구현 (samsung-analyzer.ts)
+9. 해외 콘텐츠 한국어 번역 모듈 구현 (translator.ts)
+10. SamsungInsightCard 컴포넌트 구현
+
 ### Phase 2: 소스 확장
-8. YouTube Data API 수집기 (안될공학, 조코딩, T Times)
-9. X API 수집기 (빅테크 계정)
-10. 소스별 배지 및 필터 UI
+11. YouTube Data API 수집기 (국내: 안될공학, 조코딩, T Times)
+12. YouTube 해외 채널 수집기 (Two Minute Papers, AI Explained, Matt Wolfe, Fireship, TheAIGRID)
+13. X API 수집기 (빅테크 계정)
+14. 소스별 배지 및 필터 UI
 
 ### Phase 3: 시각화 & 자동화
-11. Recharts 차트 (소스 분포, 카테고리, 트렌드)
-12. GitHub Actions 스케줄러 설정
-13. 아카이브/검색 페이지
+15. Recharts 차트 (소스 분포, 카테고리, 트렌드)
+16. GitHub Actions 스케줄러 설정
+17. 아카이브/검색 페이지
 
 ### Phase 4: 고도화
-14. 이메일 구독 기능
-15. 다크 모드
-16. PWA 지원
-17. 성능 최적화
+18. 이메일 구독 기능
+19. 다크 모드
+20. PWA 지원
+21. 성능 최적화
 
 ---
 
